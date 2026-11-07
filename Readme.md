@@ -1,217 +1,134 @@
 # FastSpeech 2 Text-to-Speech for English and Telugu
 
-A multilingual Text-to-Speech (TTS) system built using **FastSpeech 2**, with separate acoustic models for English and Telugu. The project uses language-specific text processing pipelines and a pretrained universal HiFi-GAN vocoder to generate speech from text.
+Two separate FastSpeech 2 models, one per language, trained on about 5 hours of audio each (plus about 1 hour for validation):
 
-## Project Overview
-
-This project implements two independent FastSpeech 2 models:
-
-- **English:** Trained using the Svarah dataset from AI4Bharat.
-- **Telugu:** Trained using the IndicTTS Telugu dataset.
-
-The implementation is based on the PyTorch FastSpeech 2 repository by [ming024](https://github.com/ming024/FastSpeech2), with modifications for language-specific preprocessing, text-to-phoneme conversion, training, and inference.
-
-## Model Details
-
-| Component | English | Telugu |
+| | English | Telugu |
 |---|---|---|
-| Dataset | Svarah | IndicTTS Telugu |
+| Dataset | Svarah (AI4Bharat), 91 speakers | IndicTTS Telugu (Hugging Face copy), 2 speakers |
+| Training audio / validation audio | 4.86 h / 1.08 h | 4.94 h / 1.00 h |
 | Training steps | 24,000 | 20,000 |
-| Training audio | 4.86 hours | 4.94 hours |
-| Speakers | 91 | 2 |
-| Acoustic model | FastSpeech 2 | FastSpeech 2 |
-| Vocoder | Universal HiFi-GAN | Universal HiFi-GAN |
+| Best validation loss | 3.530 (step 3,000) | 3.590 (step 2,000) |
+| Validation loss at the final step | 3.712 | 4.067 |
+| Checkpoint in this repo | `English/checkpoints/24000.pth.tar` | `Telugu/checkpoints/20000.pth.tar` |
 
-Both models use the same FastSpeech 2 architecture, with language-specific speaker embeddings and text front ends.
+Both models overfit early, and the final checkpoints (not the validation minimum) are the ones used for the generated audio. The full analysis is in the technical report: **`Report/Technical_Report.pdf`**.
 
-## Architecture
+The code is based on the PyTorch implementation [ming024/FastSpeech2](https://github.com/ming024/FastSpeech2) of the paper *FastSpeech 2: Fast and High-Quality End-to-End Text to Speech* (Ren et al., ICLR 2021). The pretrained universal HiFi-GAN vocoder from that repository is used as is and was not retrained.
 
-The system consists of the following components:
+## Repository layout
 
-1. **Text Front End:** Normalizes input text and converts it into phoneme sequences.
-2. **Encoder:** Processes phoneme sequences using Feed-Forward Transformer blocks.
-3. **Variance Adaptor:** Predicts duration, pitch, and energy.
-4. **Length Regulator:** Expands phoneme representations into frame-level representations.
-5. **Mel Decoder and PostNet:** Generates refined mel-spectrograms.
-6. **HiFi-GAN Vocoder:** Converts mel-spectrograms into speech waveforms.
-
-## Datasets
-
-### English – Svarah
-- Source: AI4Bharat Svarah.
-- Contains Indian-accented English speech.
-- Training data after preprocessing and alignment: 4.86 hours.
-- 91 speakers were selected.
-
-Dataset: https://huggingface.co/datasets/ai4bharat/Svarah
-
-### Telugu – IndicTTS
-- Source: SPRINGLab IndicTTS Telugu.
-- Contains studio-recorded Telugu speech.
-- Training data after preprocessing and alignment: 4.94 hours.
-- Two speakers were used.
-
-Dataset: https://huggingface.co/datasets/SPRINGLab/IndicTTS_Telugu
-
-## Technologies Used
-
-- Python
-- PyTorch
-- FastSpeech 2
-- HiFi-GAN
-- Montreal Forced Aligner (MFA)
-- Librosa
-- PyWorld
-- g2p_en
-- NumPy and SciPy
-- Matplotlib
-
-## Repository Structure
-
-```text
-FastSpeech2-TTS/
-│
-├── English/
-│   ├── config.yaml
-│   ├── preprocess.py
-│   ├── train.py
-│   └── inference.py
-│
-├── Telugu/
-│   ├── config.yaml
-│   ├── preprocess.py
-│   ├── train.py
-│   └── inference.py
-│
-├── text/
-│   ├── telugu.py
-│   ├── english_frontend.py
-│   └── symbols.py
-│
-├── scripts/
-│   ├── setup_env.sh
-│   ├── run_mfa.sh
-│   ├── export_checkpoint.py
-│   └── plot_losses.py
-│
-├── Results/
-│   ├── English/
-│   └── Telugu/
-│
-├── requirements.txt
-└── README.md
+```
+English/                  preprocess.py  train.py  inference.py  config.yaml  test_sentences.json  checkpoints/
+Telugu/                   preprocess.py  train.py  inference.py  config.yaml  test_sentences.json  checkpoints/
+fastspeech2/              reference code with our modifications (model, text front ends, audio, utils)
+scripts/                  data selection, forced alignment, loss plots, checkpoint export, setup
+preprocessed_data/        small files needed for inference (stats.json, speakers.json, train.txt, val.txt)
+Results/
+  English/ and Telugu/    training_loss.png, validation_loss.png, test_generated_audios/,
+                          variance_adaptor_plots/{duration,pitch,energy}/, spectrograms/,
+                          predictions.json, control_experiments/
+Report/Technical_Report.pdf
+requirements.txt
 ```
 
-*The structure above highlights the main project files; other modules from the FastSpeech 2 implementation are also required.*
+The large preprocessed features (mel, pitch, energy, duration), the raw audio and the alignments are not in the repository. They are rebuilt by the preprocessing steps below.
 
-## Installation
+## Quick start: synthesise the test sentences with the included checkpoints
 
-Clone the repository:
+The repository contains the final checkpoints (weights only, fp16, about 70 MB each), so inference can be run without retraining. A CPU is enough for the five sentences. Run from the repository root:
 
 ```bash
-git clone https://github.com/KambhampatiAdvaith/fastspeech
-cd FastSpeech2-TTS
+bash scripts/setup_env.sh          # installs packages, NLTK data and the pretrained HiFi-GAN vocoder, and a Telugu font
+python English/inference.py --restore_step 24000 --controls
+python Telugu/inference.py  --restore_step 20000 --controls
 ```
 
-Install Python dependencies:
+Outputs are written to `Results/English` and `Results/Telugu`: the audio for every test sentence, the duration, pitch (F0) and energy plots, spectrograms, a `predictions.json` file with the predicted values, and, with `--controls`, speed, pitch and energy variations. Add `--speaker NAME` to choose a speaker in the multi-speaker models (the default is the speaker with the most training data: `spk000` for English, the speaker with code 1 for Telugu).
+
+Inference needs `stats.json`, `speakers.json` and `train.txt` from `preprocessed_data/<Language>/`, which are included.
+
+## Test sentences
+
+The sentences are stored in `English/test_sentences.json` and `Telugu/test_sentences.json` with the IDs E1, E2a, E2b, E3, E4 and T1, T2a, T2b, T3, T4. The text is kept as given in the assignment, including the stray space in E3 ("rhyth m").
+
+## Environment
+
+Developed and run on Google Colab (preprocessing, English training up to step 12,000) and Kaggle (English training from step 12,000, Telugu training), with Python 3.13 and the PyTorch version preinstalled on those runtimes (the exact version was not recorded; run `pip freeze` to record yours).
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Run the environment setup script:
+[Montreal Forced Aligner](https://montreal-forced-aligner.readthedocs.io/) is needed for preprocessing only and is installed with conda (`conda install -c conda-forge montreal-forced-aligner`). Its command-line flags change between versions, so check `mfa align --help` if a flag is rejected.
+
+## Reproducing the full pipeline
+
+Run everything from the repository root.
+
+**English (Svarah).** The dataset is gated on Hugging Face: accept the terms at https://huggingface.co/datasets/ai4bharat/Svarah and set a read token.
 
 ```bash
-bash scripts/setup_env.sh
-```
-
-Montreal Forced Aligner must be installed separately using conda-forge.
-
-## Preprocessing and Training
-
-### English
-
-```bash
-python English/preprocess.py select
-bash scripts/run_mfa.sh English
-python English/preprocess.py features
-python English/train.py
-```
-
-Set `HF_TOKEN` before selecting the English dataset.
-
-### Telugu
-
-```bash
-python Telugu/preprocess.py select
-bash scripts/run_mfa.sh Telugu
-python Telugu/preprocess.py features
-python Telugu/train.py
-```
-
-To resume training from a checkpoint, use the `--restore_step` argument supported by the training scripts.
-
-## Inference
-
-Generate English speech:
-
-```bash
+export HF_TOKEN=...                          # your Hugging Face token
+python English/preprocess.py select --max_speakers 115 --max_dur 15
+bash   scripts/run_mfa.sh English            # forced alignment
+python English/preprocess.py features        # mel, pitch, energy, durations, train/val split
+python English/train.py                      # resume with: --restore_step N
+python scripts/plot_losses.py English
 python English/inference.py --restore_step 24000 --controls
 ```
 
-Generate Telugu speech:
+**Telugu (IndicTTS, Hugging Face copy `SPRINGLab/IndicTTS_Telugu`).**
 
 ```bash
+python Telugu/preprocess.py select
+bash   scripts/run_mfa.sh Telugu             # trains an alignment model on the 6 h, then aligns
+python Telugu/preprocess.py features
+python Telugu/train.py
+python scripts/plot_losses.py Telugu
 python Telugu/inference.py --restore_step 20000 --controls
 ```
 
-The inference pipeline generates speech and can also produce duration, pitch, and energy visualizations and control experiments.
+The training length is set in each `config.yaml` (`total_step`, `anneal_steps`). The values used are 24,000 and 20,000.
 
-## Model Checkpoints
+## Data selection and split
 
-The trained synthesis checkpoints are:
+Both languages use the same procedure with random seed 13: clips are filtered by length and transcript quality, about 6 hours are sampled at random, and the sample is split by utterance into about 5 hours of training audio and 1 hour of validation audio, stratified by speaker. The split is written to a manifest and checked in code, so no utterance is in both sets. Validation shares speakers with training.
 
-| Language | Training checkpoint |
+- **English:** 4,752 of 6,656 Svarah utterances kept (1.5 to 15 s, plain-text transcript). The Hugging Face release has no speaker-id column, so speakers are identified by the combination of the speaker-metadata columns (115 keys found; Svarah documents 117 speakers). After alignment: 3,026 training and 645 validation utterances.
+- **Telugu:** about 3 hours drawn from each of the two speakers in the dataset (neither has 6 hours alone), so the Telugu model is a two-speaker model. After alignment: 2,143 training and 438 validation utterances.
+
+## Main changes to the reference implementation
+
+| Area | Change |
 |---|---|
-| English | Step 24,000 |
-| Telugu | Step 20,000 |
+| Compatibility | Current librosa and PyTorch (keyword arguments, `weights_only=False`), no hard-coded `.cuda()` calls, energy targets cast to float32 |
+| Preprocessing | Only speaker directories are traversed, and files without an alignment are skipped |
+| Bug fix | The energy embedding used the pitch control value; it now uses the energy control value |
+| English front end | Number, date and time expansion, spelled-out AM and PM, and sentence-level G2P so noun and verb pronunciations of "conduct" are chosen by part of speech |
+| Telugu front end (new) | Unicode normalisation, number, ordinal and time expansion into Telugu words, and a rule-based Telugu-script-to-phone converter; Telugu phones added to the symbol table |
+| Configuration | One `config.yaml` per language; explicit train/validation split with an overlap check |
+| Inference | New script that synthesises the test sentences and writes the duration, pitch and energy plots and the predicted values |
 
-## Model Checkpoints
+Details and the reasons for each change are in section 1 of the report.
 
-The English and Telugu FastSpeech 2 models were trained separately using their respective datasets.
+## Checkpoints
 
-The trained model checkpoints are maintained privately and are not included in this public repository.
+Only the final checkpoint of each language is included. They are weights-only fp16 files exported with `scripts/export_checkpoint.py` so that they fit GitHub's file-size limit. Intermediate checkpoints saved during training (which include optimiser state and are several hundred MB each) are not included. The files are named by training step because the inference script loads `<restore_step>.pth.tar`.
 
-## Results
+## Known limitations
 
-The project includes:
+- Both models overfit early; the validation minimum is at step 3,000 (English) and step 2,000 (Telugu), and earlier checkpoints were not compared.
+- The English config uses `max_seq_len: 1000` (11.6 s), so about 5% of the English training clips are only partly used.
+- Predicted energy and F0 are not constrained, so occasional impossible values (for example slightly negative energy) occur.
+- The Telugu number-word tables and G2P rules have not been checked by a native speaker.
+- The evaluation is informal (one listener, no objective metrics). See sections 4 to 6 of the report.
+- Training seeds are not fixed in the reference code, so a rerun will differ slightly.
 
-- Generated English and Telugu speech samples.
-- Training and validation loss plots.
-- Mel-spectrogram visualizations.
-- Predicted duration, pitch (F0), and energy plots.
-- `predictions.json` files.
-- Speed, pitch, and energy control experiments.
+## Licences and credits
 
-Results are organized under `Results/English` and `Results/Telugu`.
+- FastSpeech 2 code: [ming024/FastSpeech2](https://github.com/ming024/FastSpeech2) (MIT licence; the licence file is kept in `fastspeech2/LICENSE`).
+- HiFi-GAN vocoder: Kong et al., *HiFi-GAN*, NeurIPS 2020.
+- Forced alignment: Montreal Forced Aligner (McAuliffe et al., Interspeech 2017).
+- Data: [Svarah](https://huggingface.co/datasets/ai4bharat/Svarah) (AI4Bharat) and the [IndicTTS Telugu](https://huggingface.co/datasets/SPRINGLab/IndicTTS_Telugu) data derived from the [IIT Madras IndicTTS database](https://www.iitm.ac.in/donlab/indictts/database). Please follow the terms of use on those pages. The datasets are not redistributed here.
 
-## Limitations
-
-- Both models show signs of overfitting during later training stages.
-- The universal HiFi-GAN vocoder was not fine-tuned on the target datasets.
-- Some generated utterances contain audible artefacts.
-- Telugu text processing uses a rule-based phoneme conversion system that has not been validated by a native-speaker evaluation.
-- Evaluation was informal and did not include objective speech-quality metrics.
-
-## References
-
-1. Ren et al. (2021), [FastSpeech 2: Fast and High-Quality End-to-End Text to Speech](https://arxiv.org/abs/2006.04558).
-2. [FastSpeech 2 – PyTorch Implementation](https://github.com/ming024/FastSpeech2).
-3. Kong et al. (2020), [HiFi-GAN](https://arxiv.org/abs/2010.05646).
-4. [Montreal Forced Aligner](https://www.isca-archive.org/interspeech_2017/mcauliffe17_interspeech.html).
-5. [AI4Bharat Svarah Dataset](https://github.com/AI4Bharat/Svarah).
-6. [IIT Madras TTS and Indic Resources](https://indicnlp.ai4bharat.org/resources/).
-
-## Author
-
-**Kambhampati Advaith**
+Author: Kambhampati Advaith
