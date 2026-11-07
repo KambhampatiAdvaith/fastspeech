@@ -131,4 +131,3 @@ Only the final checkpoint of each language is included. They are weights-only fp
 - Forced alignment: Montreal Forced Aligner (McAuliffe et al., Interspeech 2017).
 - Data: [Svarah](https://huggingface.co/datasets/ai4bharat/Svarah) (AI4Bharat) and the [IndicTTS Telugu](https://huggingface.co/datasets/SPRINGLab/IndicTTS_Telugu) data derived from the [IIT Madras IndicTTS database](https://www.iitm.ac.in/donlab/indictts/database). Please follow the terms of use on those pages. The datasets are not redistributed here.
 
-Author: Kambhampati Advaith
