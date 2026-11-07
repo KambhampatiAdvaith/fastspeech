@@ -1,0 +1,17 @@
+@"
+raw_data/
+output/
+dictionaries/
+*.zip
+__pycache__/
+preprocessed_data/*/mel/
+preprocessed_data/*/pitch/
+preprocessed_data/*/energy/
+preprocessed_data/*/duration/
+preprocessed_data/*/TextGrid/
+fastspeech2/hifigan/generator_*.pth.tar
+English/checkpoints/*
+Telugu/checkpoints/*
+!English/checkpoints/24000.pth.tar
+!Telugu/checkpoints/20000.pth.tar
+"@ | Set-Content .gitignore -Encoding ascii

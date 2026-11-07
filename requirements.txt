@@ -1,0 +1,19 @@
+numpy
+scipy
+librosa>=0.10
+pyworld
+tgt
+g2p_en
+inflect
+Unidecode
+pypinyin
+nltk
+scikit-learn
+matplotlib
+PyYAML
+tensorboard
+datasets<4
+
+# Optional: ASR-based evaluation
+jiwer
+transformers
